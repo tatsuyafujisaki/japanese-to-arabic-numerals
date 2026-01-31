@@ -123,8 +123,6 @@ function scrollToArticle(input: string) {
   const subParts = parts.slice(1);
   const subTextHalf = subParts.length > 0 ? 'の' + subParts.join('の') : '';
   const subTextFull = subParts.length > 0 ? 'の' + subParts.map(s => toFullWidth(s)).join('の') : '';
-  // Sub-articles are usually not Japanese numerals in modernized view, but in original they are?
-  // Actually "第一条の二" is common.
   const subTextJapaneseNumeral = subParts.length > 0 ? 'の' + subParts.map(s => toJapaneseNumeral(parseInt(s))).join('の') : '';
 
   const targets = [
@@ -133,13 +131,16 @@ function scrollToArticle(input: string) {
     `第${mainArticleJapaneseNumeral}条${subTextJapaneseNumeral}`
   ];
 
-  // Also try without "第" prefix if it's a list? e-Gov usually has "第"
+  type MatchCandidate = {
+    node: HTMLElement;
+    score: number;
+    text: string;
+  };
 
-  let targetNode: HTMLElement | null = null;
-  let matchedText = '';
+  const candidates: MatchCandidate[] = [];
 
   for (const targetText of targets) {
-    // 1. Try to find by class ArticleTitle first (very reliable)
+    // 1. Try to find by class ArticleTitle or ParagraphNum (reliable)
     const classXpath = `//*[(contains(@class, "ArticleTitle") or contains(@class, "ParagraphNum")) and contains(., "${targetText}")]`;
     const classResult = document.evaluate(classXpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
@@ -148,59 +149,65 @@ function scrollToArticle(input: string) {
       if (node.closest('a')) continue;
 
       const normalizedText = (node.textContent || '').replace(/[\s,]/g, '');
-      if (normalizedText.includes(targetText)) {
-        // Double check it's not a prefix
-        const index = normalizedText.indexOf(targetText);
-        const nextChar = normalizedText[index + targetText.length];
-        if (nextChar && /[0-9０-９]/.test(nextChar)) continue;
+      const index = normalizedText.indexOf(targetText);
+      if (index === -1) continue;
 
-        targetNode = node;
-        matchedText = targetText;
-        break;
-      }
+      // Check if it's a prefix
+      const nextChar = normalizedText[index + targetText.length];
+      if (nextChar && /[0-9０-９の]/.test(nextChar)) continue;
+
+      let score = 0;
+      const classAttr = node.getAttribute('class') || '';
+      if (classAttr.includes('ArticleTitle')) score += 1000;
+      if (classAttr.includes('ParagraphNum')) score += 500;
+      if (index === 0) score += 2000;
+
+      candidates.push({ node, score, text: targetText });
     }
-    if (targetNode) break;
 
-    // 2. Fallback to general search but prefer lowest level elements
+    if (candidates.length > 0) break;
+
+    // 2. Fallback to general search
     const generalXpath = `//*[not(self::script) and not(self::style) and contains(., "${targetText}")]`;
     const generalResult = document.evaluate(generalXpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
-    // We want the most specific node (last in document order among nested matches)
     for (let i = 0; i < generalResult.snapshotLength; i++) {
-      const node = generalResult.snapshotItem(i) as HTMLElement;
-      if (node.closest('a')) continue;
+        const node = generalResult.snapshotItem(i) as HTMLElement;
+        if (node.closest('a')) continue;
 
-      const normalizedText = (node.textContent || '').replace(/[\s,]/g, '');
-      if (normalizedText.includes(targetText)) {
-        // Check if it's a prefix
+        const normalizedText = (node.textContent || '').replace(/[\s,]/g, '');
         const index = normalizedText.indexOf(targetText);
+        if (index === -1) continue;
+
         const nextChar = normalizedText[index + targetText.length];
-        if (nextChar && /[0-9０-９]/.test(nextChar)) continue;
+        if (nextChar && /[0-9０-９の]/.test(nextChar)) continue;
 
         // Take it if it's the first one, but try to find a child if it's a large container
         let bestChild = node;
         const children = node.querySelectorAll('*');
         for (const child of Array.from(children)) {
             const childText = (child.textContent || '').replace(/[\s,]/g, '');
-            if (childText.includes(targetText)) {
-                const cIndex = childText.indexOf(targetText);
+            const cIndex = childText.indexOf(targetText);
+            if (cIndex !== -1) {
                 const cNextChar = childText[cIndex + targetText.length];
-                if (!(cNextChar && /[0-9０-９]/.test(cNextChar))) {
+                if (!(cNextChar && /[0-9０-９の]/.test(cNextChar))) {
                     bestChild = child as HTMLElement;
                 }
             }
         }
-        targetNode = bestChild;
-        matchedText = targetText;
-        break;
-      }
+
+        candidates.push({ node: bestChild, score: (index === 0 ? 100 : 0), text: targetText });
     }
-    if (targetNode) break;
+
+    if (candidates.length > 0) break;
   }
 
-  if (targetNode) {
-    targetNode.scrollIntoView({ behavior: 'auto', block: 'center' });
-    applyPremiumHighlight(targetNode, matchedText);
+  if (candidates.length > 0) {
+    // Pick the one with the highest score. If scores are equal, the first one (document order) wins.
+    candidates.sort((a, b) => b.score - a.score);
+    const best = candidates[0]!;
+    best.node.scrollIntoView({ behavior: 'auto', block: 'center' });
+    applyPremiumHighlight(best.node, best.text);
     if (jumpTimeout) clearTimeout(jumpTimeout);
   } else {
     console.log(`Article targets ${JSON.stringify(targets)} not found. (Input: "${input}")`);
