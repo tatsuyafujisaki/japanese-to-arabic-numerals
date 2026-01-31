@@ -54,15 +54,15 @@ const rules: ConversionRule[] = [
   },
   // Ordinals (no commas for article numbers usually)
   {
-    pattern: new RegExp(`第([${KANJI_NUMS}]+)(?!取得者|債務者|者|方|般|号)`, 'g'),
+    pattern: new RegExp(`第([${KANJI_NUMS}]+)(?![${KANJI_NUMS}])(?!取得者|債務者|者|方|般)`, 'g'),
     replace: (_, n) => `第${convertString(n)}`
   },
   {
-    pattern: new RegExp(`前([${KANJI_NUMS}]+)(?!方|般|号)`, 'g'),
+    pattern: new RegExp(`前([${KANJI_NUMS}]+)(?![${KANJI_NUMS}])(?!方|般)`, 'g'),
     replace: (_, n) => `前${convertString(n)}`
   },
   {
-    pattern: new RegExp(`([条項章節款目\\d])((?:の[${KANJI_NUMS}]+)+)(?!方|般)`, 'g'),
+    pattern: new RegExp(`([条項章節款目\\d])((?:の[${KANJI_NUMS}]+)+)(?![${KANJI_NUMS}])(?!方|般)`, 'g'),
     replace: (_: string, prefix: string, branches: string) => prefix + branches.replace(new RegExp(`の([${KANJI_NUMS}]+)`, 'g'), (__: string, n: string) => `の${convertString(n)}`)
   },
   // Large numbers without specific unit suffix (e.g. 二十万)
