@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "e-Gov法令アラビア数字変換",
-  "version": "1.0",
-  "description": "e-Gov法令の漢数字をアラビア数字に変換します。",
+  "name": "e-Gov法令アラビア数字変換 & 条文ジャンプ",
+  "version": "0.1.0",
+  "description": "e-Gov法令の漢数字をアラビア数字に変換して可読性を大幅に向上。さらに、複雑な枝番号（第○条の○の○）にも対応した条文ジャンプ機能で、法令の閲覧と調査をよりスムーズにします。",
   "content_scripts": [
     {
       "matches": [
